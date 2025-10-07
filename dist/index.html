@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gaussian Splatting Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: Arial, sans-serif;
+        }
+        #canvas-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        canvas {
+            display: block;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            z-index: 1000;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: white;
+        }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        input[type="file"] {
+            color: white;
+            margin: 5px 0;
+        }
+        button {
+            background: #444;
+            color: white;
+            border: 1px solid #666;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            margin: 2px;
+        }
+        button:hover {
+            background: #555;
+        }
+    </style>
+  <script type="module" crossorigin src="/bundle.gaussian-splatting.js"></script>
+</head>
+<body>
+    <div id="canvas-container">
+        <div id="loading">Loading Gaussian Splatting Viewer...</div>
+        <div id="controls">
+            <div class="control-group">
+                <label>Load PLY File:</label><br>
+                <input type="file" id="ply-input" accept=".ply">
+            </div>
+            <div class="control-group">
+                <label>Load GLB Model:</label><br>
+                <input type="file" id="glb-input" accept=".glb,.gltf">
+            </div>
+            <div class="control-group">
+                <button id="reset-camera">Reset Camera</button>
+                <button id="toggle-splats">Toggle Splats</button>
+                <button id="toggle-models">Toggle Models</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "gaussian-splatting-viewer",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["gaussian-splatting", "threejs", "3d", "webgl"],
+  "author": "",
+  "license": "ISC",
+  "description": "Gaussian Splatting viewer with Three.js and GLB model integration",
+  "dependencies": {
+    "dat.gui": "^0.7.9",
+    "gsap": "^3.12.7",
+    "three": "^0.167.1",
+    "@mkkellogg/gaussian-splats-3d": "^0.4.7",
+    "@sparkjsdev/spark": "^0.1.8"
+  },
+  "devDependencies": {
+    "@types/dat.gui": "^0.7.13",
+    "vite": "^5.4.2"
+  }
+}
