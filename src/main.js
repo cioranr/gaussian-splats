@@ -207,6 +207,7 @@ class GaussianSplattingViewer {
         this.renderer = null;
         this.controls = null;
         this.plyLoader = null;
+        this.envMap = null;
         this.gaussianViewer = null;
         this.loadedModels = [];
         this.transformControls = null;
@@ -234,13 +235,13 @@ class GaussianSplattingViewer {
         this.camera = new THREE.PerspectiveCamera(
             75,
             window.innerWidth / window.innerHeight,
-            0.1,
-            1000
+            0.001,
+            10000
         );
         // Position camera at table height looking horizontally at the table
-        this.camera.position.set(-0.56, -1.54, -0.71); // Near table level, slightly back
-        this.camera.up.set(0.08, -1.00, 0.06); // Fix upside down orientation
-        this.camera.lookAt(-0.29, -1.02, 0.07); // Look at table surface level
+        this.camera.position.set(-2.14, 0.32, 0.91); // Near table level, slightly back
+        this.camera.up.set(0.04, -0.91, -0.41); // Fix upside down orientation
+        this.camera.lookAt(-0.971, 1.451, 1.147); // Look at model
         // Create renderer
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
 
@@ -249,9 +250,9 @@ class GaussianSplattingViewer {
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1;
+        this.renderer.toneMappingExposure = 1.0;
 
         // Setup lighting and environment
         this.setupLighting();
@@ -267,15 +268,20 @@ class GaussianSplattingViewer {
             // Use full window size for fallback
             this.renderer.setSize(window.innerWidth, window.innerHeight);
         } else {
-            // Clear the placeholder content from the screen div
-            container.innerHTML = '';
+            // Remove only placeholder text/content, but keep buttons and UI elements
+            // Only clear if there's just text content (placeholder)
+            const hasOnlyTextContent = container.children.length === 0 && container.textContent.trim().length > 0;
+            if (hasOnlyTextContent) {
+                container.innerHTML = '';
+            }
             container.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #222222; border-radius: 8px;';
             // Set renderer size to match container
             this.renderer.setSize(container.clientWidth, container.clientHeight);
             this.camera.aspect = container.clientWidth / container.clientHeight;
             this.camera.updateProjectionMatrix();
         }
-        container.appendChild(this.renderer.domElement);
+        // Insert renderer as first child so buttons stay on top
+        container.insertBefore(this.renderer.domElement, container.firstChild);
 
         // Create controls
         this.controls = new OrbitControls(this.camera, this.renderer.domElement);
@@ -285,7 +291,7 @@ class GaussianSplattingViewer {
         this.controls.minDistance = 0.001; // Allow camera to get very close/inside
         this.controls.maxDistance = 100;
         this.controls.maxPolarAngle = Math.PI;
-        this.controls.target.set(-0.29, -1.02, 0.07); // Look at table surface level
+        this.controls.target.set(-0.971, 1.451, 1.147); // Look at model
         this.controls.update();
 
         // Create Transform Controls
@@ -314,9 +320,16 @@ class GaussianSplattingViewer {
     setupLighting() {
         // Load HDR environment map
         const rgbeLoader = new RGBELoader();
-        rgbeLoader.load('/assets/scenes/outside_city.hdr', (texture) => {
-            texture.mapping = THREE.EquirectangularReflectionMapping;
-            this.scene.environment = texture;
+
+        const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+        pmremGenerator.compileEquirectangularShader();
+
+        rgbeLoader.load('/assets/scenes/green_sanctuary_2k.hdr', (texture) => {
+            const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+            this.envMap = envMap;
+            texture.dispose(); // free memory
+            pmremGenerator.dispose();
+            this.scene.environment = envMap;
             //this.scene.background = texture;
             this.scene.background = new THREE.Color(0x48617d);
             //console.log('🌅 HDR environment map loaded successfully');
@@ -327,27 +340,29 @@ class GaussianSplattingViewer {
         });
 
         // Ambient light (reduced since we have environment lighting)
-         const ambientLight = new THREE.AmbientLight(0x404040, 0.3);
+         const ambientLight = new THREE.AmbientLight(0x404040, 5);
          this.scene.add(ambientLight);
 
         // Main directional light (sun simulation)
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
-        directionalLight.position.set(5, 10, 3);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 2048;
-        directionalLight.shadow.mapSize.height = 2048;
-        directionalLight.shadow.camera.near = 0.5;
-        directionalLight.shadow.camera.far = 50;
-        directionalLight.shadow.camera.left = -10;
-        directionalLight.shadow.camera.right = 10;
-        directionalLight.shadow.camera.top = 10;
-        directionalLight.shadow.camera.bottom = -10;
-        directionalLight.shadow.bias = -0.0001;
-        this.scene.add(directionalLight);
+        this.directionalLight = new THREE.DirectionalLight(0xffffff, 2.0);
+        this.directionalLight.position.set(-1.01, 1.38, 1.12); // Position above and in front of model
+        this.directionalLight.target.position.set(-0.971, 1.451, 1.147); // Point at model
+        this.scene.add(this.directionalLight.target); // Add target to scene
+        this.directionalLight.castShadow = true;
+        this.directionalLight.shadow.mapSize.width = 2048;
+        this.directionalLight.shadow.mapSize.height = 2048;
+        this.directionalLight.shadow.camera.near = 0.1;
+        this.directionalLight.shadow.camera.far = 10;
+        this.directionalLight.shadow.camera.left = -3;
+        this.directionalLight.shadow.camera.right = 3;
+        this.directionalLight.shadow.camera.top = 4;
+        this.directionalLight.shadow.camera.bottom = -1;
+        this.directionalLight.shadow.bias = -0.0001;
+        this.scene.add(this.directionalLight);
 
         // Additional fill light for better model illumination
-        const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
-        fillLight.position.set(-3, 5, -2);
+        const fillLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        fillLight.position.set(-3, 3, 0); // Fill from the side
         this.scene.add(fillLight);
     }
 
@@ -388,7 +403,7 @@ class GaussianSplattingViewer {
                     'selfDrivenMode': false,
                     'renderer': this.renderer,
                     'camera': this.camera,
-                    'useBuiltInControls': true,
+                    'useBuiltInControls': false,
                     'ignoreDevicePixelRatio': false,
                     'gpuAcceleratedSort': false,
                     'enableSIMDInSort': false,
@@ -423,8 +438,13 @@ class GaussianSplattingViewer {
 
                         const screenContainer = document.getElementById('screen');
                         if (screenContainer && this.renderer.domElement.parentNode !== screenContainer) {
-                            screenContainer.innerHTML = '';
-                            screenContainer.appendChild(this.renderer.domElement);
+                            // Remove only the renderer canvas if it exists elsewhere, keep other elements
+                            const existingCanvas = screenContainer.querySelector('canvas');
+                            if (existingCanvas && existingCanvas !== this.renderer.domElement) {
+                                existingCanvas.remove();
+                            }
+                            // Insert renderer as first child so buttons stay on top
+                            screenContainer.insertBefore(this.renderer.domElement, screenContainer.firstChild);
                         }
 
                         this.animate();
@@ -836,75 +856,99 @@ class GaussianSplattingViewer {
         const initialCameraPos = this.camera.position.clone();
         const initialTarget = this.controls.target.clone();
 
-        // Calculate orbit path around the model
-        const centerPoint = this.controls.target.clone();
-        const radius = initialCameraPos.distanceTo(centerPoint);
-        const height = initialCameraPos.y;
+        // Disable controls during animation
+        this.controls.enabled = false;
 
-        // Calculate the starting angle based on current camera position
-        const dx = initialCameraPos.x - centerPoint.x;
-        const dz = initialCameraPos.z - centerPoint.z;
-        const startAngle = Math.atan2(dz, dx);
-
-        // Create GSAP timeline for smooth animation
+        // Create GSAP timeline
         const timeline = gsap.timeline({
-            onStart: () => {
-                this.controls.enabled = false; // Disable manual controls during animation
-                console.log('🎬 Animation started from angle:', startAngle);
-            },
             onComplete: () => {
-                this.controls.enabled = true; // Re-enable controls
+                this.controls.enabled = true;
                 this.stopRecording();
-                console.log('🎬 Animation completed');
             }
         });
 
-        // Animation parameters
-        const rotationDuration = 5; // 5 seconds for 90 degree rotation
-        const closeUpDuration = 3; // 3 seconds for close-up
-        const returnDuration = 2; // 2 seconds to return
+        // Calculate the orbital plane based on camera's current "up" direction
+        // This ensures we orbit perpendicular to how the camera sees "up"
+        const cameraToTarget = new THREE.Vector3().subVectors(initialTarget, initialCameraPos);
+        const distance = cameraToTarget.length();
 
-        // Create a dummy object to animate for rotation - START FROM CURRENT ANGLE
-        const rotationParams = { angle: startAngle };
+        // Use camera's up vector to define the rotation axis
+        const rotationAxis = this.camera.up.clone().normalize();
 
-        // Phase 1: 90 degree rotation from initial position
-        timeline.to(rotationParams, {
-            angle: startAngle + (Math.PI / 2), // 90 degree rotation from starting position
-            duration: rotationDuration,
+        // Calculate the right vector (perpendicular to both up and view direction)
+        const viewDirection = cameraToTarget.clone().normalize();
+        const rightVector = new THREE.Vector3().crossVectors(viewDirection, rotationAxis).normalize();
+
+        // Recalculate up to ensure orthogonal basis
+        const trueUp = new THREE.Vector3().crossVectors(rightVector, viewDirection).normalize();
+
+        // Animation object to track progress
+        const animState = {
+            orbitAngle: -Math.PI / 4 // Start at -45 degrees
+        };
+
+        // Phase 1: Orbit 90 degrees around the up axis (-45deg to +45deg) (5 seconds)
+        timeline.to(animState, {
+            orbitAngle: Math.PI / 4, // End at +45 degrees (total 90 degree rotation)
+            duration: 5,
             ease: 'power1.inOut',
             onUpdate: () => {
-                const angle = rotationParams.angle;
-                this.camera.position.x = centerPoint.x + Math.cos(angle) * radius;
-                this.camera.position.z = centerPoint.z + Math.sin(angle) * radius;
-                this.camera.position.y = height;
-                this.camera.lookAt(centerPoint);
+                // Rotate the camera-to-target vector around the rotation axis
+                const offset = new THREE.Vector3().subVectors(initialCameraPos, initialTarget);
+                const rotatedOffset = offset.clone().applyAxisAngle(rotationAxis, animState.orbitAngle);
+
+                this.camera.position.copy(initialTarget).add(rotatedOffset);
+                this.camera.lookAt(initialTarget);
+                this.camera.updateMatrixWorld();
+
+                if (this.gaussianViewer) {
+                    this.gaussianViewer.update();
+                    this.gaussianViewer.render();
+                }
             }
         });
 
-        // Phase 2: Move to close-up position from the rotated position
-        const closeUpDistance = radius * 0.6;
-        const rotatedAngle = startAngle + (Math.PI / 2);
+        // Calculate the final rotated position (+45 degrees)
+        const finalOffset = new THREE.Vector3().subVectors(initialCameraPos, initialTarget);
+        const finalRotatedOffset = finalOffset.clone().applyAxisAngle(rotationAxis, Math.PI / 4);
+        const finalPosition = new THREE.Vector3().copy(initialTarget).add(finalRotatedOffset);
+
+        // Phase 2: Zoom in to close-up (3 seconds)
+        // Move 70% closer to target
+        const closeUpPosition = new THREE.Vector3().copy(initialTarget).add(finalRotatedOffset.clone().multiplyScalar(0.3));
 
         timeline.to(this.camera.position, {
-            x: centerPoint.x + Math.cos(rotatedAngle) * closeUpDistance,
-            y: centerPoint.y + 0.2, // Slightly above center
-            z: centerPoint.z + Math.sin(rotatedAngle) * closeUpDistance,
-            duration: closeUpDuration,
+            x: closeUpPosition.x,
+            y: closeUpPosition.y,
+            z: closeUpPosition.z,
+            duration: 3,
             ease: 'power2.inOut',
             onUpdate: () => {
-                this.camera.lookAt(centerPoint);
+                this.camera.lookAt(initialTarget);
+                this.camera.updateMatrixWorld();
+
+                if (this.gaussianViewer) {
+                    this.gaussianViewer.update();
+                    this.gaussianViewer.render();
+                }
             }
         });
 
-        // Phase 3: Return to initial position
+        // Phase 3: Return to initial position (2 seconds)
         timeline.to(this.camera.position, {
             x: initialCameraPos.x,
             y: initialCameraPos.y,
             z: initialCameraPos.z,
-            duration: returnDuration,
+            duration: 2,
             ease: 'power2.inOut',
             onUpdate: () => {
-                this.camera.lookAt(centerPoint);
+                this.camera.lookAt(initialTarget);
+                this.camera.updateMatrixWorld();
+
+                if (this.gaussianViewer) {
+                    this.gaussianViewer.update();
+                    this.gaussianViewer.render();
+                }
             }
         });
 
@@ -1224,10 +1268,12 @@ function initializeGaussianSplattingViewer() {
                             // If it's an array of materials
                             if (Array.isArray(child.material)) {
                                 child.material.forEach(mat => {
-                                    mat.envMapIntensity = 1;
+                                    mat.envMap = window.gsViewer.envMap;
+                                    mat.envMapIntensity = 3;
                                     mat.needsUpdate = true;
                                 });
                             } else {
+                                child.material.envMap = window.gsViewer.envMap;
                                 child.material.envMapIntensity = 1;
                                 child.material.needsUpdate = true;
                             }
@@ -1239,7 +1285,7 @@ function initializeGaussianSplattingViewer() {
                 const box = new THREE.Box3().setFromObject(model);
                 const size = box.getSize(new THREE.Vector3());
                 const maxSize = Math.max(size.x, size.y, size.z);
-                const scale = 0.8 / maxSize; // Scale to fit in 0.5 units
+                const scale = 0.5 / maxSize; // Scale to fit in 0.5 units
                 model.scale.setScalar(scale);
 
                 // Position the model at the camera target (where camera is looking)
@@ -1250,8 +1296,8 @@ function initializeGaussianSplattingViewer() {
                 // Center the scaled model at the target position
                 const center = box.getCenter(new THREE.Vector3());
                 model.position.copy(targetPosition).sub(center.multiplyScalar(scale));
-                model.position.set(0.172, -0.881, 0.086);
-                model.rotation.set(3.113, 0.142, 1.492);
+                model.position.set(-0.971, 1.451, 1.147);
+                model.rotation.set(0.172, -1.319, 2.850);
                 //model.scale.set(0.002, 0.002, 0.002);
                 window.gsViewer.scene.add(model);
                 window.gsViewer.loadedModels.push(model);
